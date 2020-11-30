@@ -8,10 +8,78 @@ from joblib import Parallel, delayed
 import torch.nn as nn
 import torch.nn.functional as F
 import autograd.scipy.linalg as splg
+from simulation.simulation_afsaneh import gen_w
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from pathlib import Path
 
 JITTER = 1e-7
 nystr_M = 300
 EYE_nystr = np.eye(nystr_M)
+
+
+def compute_causal_estimate(h, a, w_sample_size):
+    raise ValueErrpr('Need to test.')
+    w_sample = gen_w(w_sample_size)
+    beta_a = []
+    for a_ in a:
+        a_ = np.tile(a_, w_sample_size)
+        h_inp = np.concatenate([a_, w_sample], axis=-1)
+        beta_a.append(np.mean(h(h_inp)))
+    return beta_a
+
+def bundle_az_aw(a,z,w, Torch=False):
+    """
+    Bundles the datasets for A, Z, W together to be compatible with the formulation of X, Y, Z in instrumental
+    variable models.
+    """
+    if Torch:
+        az = torch.cat([a.view(-1,1), z.view(-1,1)], dim=-1)
+        aw = torch.cat([a.view(-1,1), w.view(-1,1)], dim=-1)
+    else:
+        # az = torch.cat([a.view(-1,1), z.view(-1,1)], dim=-1).detach().cpu().numpy()
+        # aw = torch.cat([a.view(-1,1), w.view(-1,1)], dim=-1).detach().cpu().numpy()
+        az = np.concatenate([a.reshape(-1,1), z.reshape(-1,1)], axis=-1)
+        aw = np.concatenate([a.reshape(-1,1), w.reshape(-1,1)], axis=-1)
+        # print('az shape: ', az.shape, ' aw shape: ', aw.shape)
+    return az, aw
+
+def visualise_ATEs(Xs, Ys,
+                   x_name, y_name,
+                   save_loc, save_name):
+    """ From Limor.
+
+    helper function to create and save scatter plots,
+    for some arrays of interest, Xs and Ys.
+
+     Input:
+     - Xs (values to plot on X axis)
+     - Ys (values to plot on Y axis)
+     - x_name (label for X axis)
+     - y_name (label for Y axis)
+     - save_loc (path to save plot)
+     - save_name (name to save plot) """
+    plt.figure()
+    Xs = Xs.flatten()
+    Ys = Ys.flatten()
+    df = pd.DataFrame({x_name: Xs,
+                       y_name: Ys})
+    ax = sns.scatterplot(x=x_name, y=y_name, data=df)
+    ymin, ymax = ax.get_ylim()
+    xmin, xmax = ax.get_xlim()
+    start_ax_range = min(xmin, ymin) - 0.1
+    end_ax_range = max(xmax, ymax) + 0.1
+    ax.set_xlim(start_ax_range, end_ax_range)
+    ax.set_ylim(start_ax_range, end_ax_range)
+    ident = [start_ax_range, end_ax_range]
+    plt.plot(ident, ident, '--')
+
+    Path(save_loc).mkdir(parents=True, exist_ok=True)
+    print('save location: ', save_loc + '/' + save_name + '.png')
+    plt.savefig(save_loc + '/' + save_name + '.png',
+                bbox_inches='tight')
+
 
 def _sqdist(x,y,Torch=False):
     if y is None:
@@ -29,11 +97,11 @@ def get_median_inter_mnist(x):
     # x2 = np.sum(x*x,axis=1,keepdims=True)
     # sqdist = x2+x2.T-2*x@x.T
     # sqdist = (sqdist+abs(sqdist).T)/2
-    if x.shape[0]< 10000:
-        sqdist = _sqdist(x,None)
+    if x.shape[0] < 10000:
+        sqdist = _sqdist(x, None)
     else:
         M = int(x.shape[0]/400)
-        sqdist = Parallel(n_jobs=20)(delayed(_sqdist)(x[i:i+M],x) for i in range(0,x.shape[0],M))
+        sqdist = Parallel(n_jobs=20)(delayed(_sqdist)(x[i:i+M], x) for i in range(0,x.shape[0],M))
     dist = np.sqrt(sqdist)
     return np.median(dist.flatten())
 
@@ -50,6 +118,8 @@ def load_data(scenario_path,verbal=False, Torch=False):
     train = scenario.get_dataset("train")
     dev = scenario.get_dataset("dev")
     test = scenario.get_dataset("test")
+
+
     return train, dev, test
 
 def Kernel(name, Torch=False):
@@ -205,3 +275,4 @@ class CNN(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
+

@@ -7,24 +7,24 @@ from util import get_median_inter_mnist, Kernel, load_data, ROOT_PATH,_sqdist,FC
 
 
 
-def run_experiment_nn(sname,datasize,indices=[],seed=527,training=True):
+def run_experiment_nn(sname, datasize, indices=[], seed=527, training=True):
     torch.manual_seed(seed)
     np.random.seed(seed)
-    if len(indices)==2:
+    if len(indices) == 2:
         lr_id, dw_id = indices
-    elif len(indices)==3:
-        lr_id, dw_id,W_id = indices
+    elif len(indices) == 3:
+        lr_id, dw_id, W_id = indices
     # load data
     folder = ROOT_PATH+"/MMR_IVs/results/" + sname + "/"
     os.makedirs(folder, exist_ok=True) 
 
-    train, dev, test = load_data(ROOT_PATH+"/data/"+sname+'/main.npz',Torch=True)
-    X,Z,Y = torch.cat((train.x,dev.x),dim=0).float(),torch.cat((train.z,dev.z),dim=0).float(),torch.cat((train.y,dev.y),dim=0).float()
-    test_X, test_G = test.x.float(),test.g.float()
+    train, dev, test = load_data(ROOT_PATH+"/data/" + sname + '/main.npz', Torch=True)
+    X, Z, Y = torch.cat((train.x, dev.x), dim=0).float(), torch.cat((train.z, dev.z), dim=0).float(), torch.cat((train.y, dev.y), dim=0).float()
+    test_X, test_G = test.x.float(), test.g.float()
     n_train = train.x.shape[0]
     # training settings
     n_epochs = 1000
-    batch_size = 1000 if train.x.shape[0]>1000 else train.x.shape[0]
+    batch_size = 1000 if train.x.shape[0] > 1000 else train.x.shape[0]
 
     # kernel
     kernel = Kernel('rbf',Torch=True)
@@ -156,17 +156,17 @@ def run_experiment_nn(sname,datasize,indices=[],seed=527,training=True):
 
 
 if __name__ == '__main__': 
-    scenarios = ['mnist_z','mnist_x','mnist_xz']#['mnist_z','mnist_x','mnist_xz'] # ["step", "sin", "abs", "linear"]
+    scenarios = ['sim_1d_no_x']  # ['mnist_z','mnist_x','mnist_xz']  # ['mnist_z','mnist_x','mnist_xz'] # ["step", "sin", "abs", "linear"]
 
         # index = int(sys.argv[1])
         # datasize = int(sys.argv[2])
         # sid,index = divmod(index,21)
         # lr_id, dw_id = divmod(index,7)
-    datasize = 10000
+    datasize = 5000
     for s in scenarios:
         for lr_id in range(3):
             for dw_id in range(7):
-                run_experiment_nn(s,datasize, [lr_id,dw_id])
+                run_experiment_nn(s, datasize, [lr_id,dw_id])
 
     for s in scenarios:
         run_experiment_nn(s,datasize,[1, 0],training=False)
