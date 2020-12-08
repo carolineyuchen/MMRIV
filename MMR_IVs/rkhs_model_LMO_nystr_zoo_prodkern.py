@@ -19,11 +19,21 @@ opt_params = None
 prev_norm = None
 opt_test_err = None
 
+a = 1.0, beta_a = [[1.66985379]]
+a = 2.0, beta_a = [[2.20539014]]
+a = 3.0, beta_a = [[3.88334693]]
+a = 4.0, beta_a = [[6.85828155]]
+a = 5.0, beta_a = [[11.14666374]]
+a = 6.0, beta_a = [[17.82846835]]
+a = 7.0, beta_a = [[30.81872094]]
+a = 8.0, beta_a = [[33.51151209]]
+
+1.66985379, 2.20539014, 3.88334693, 6.85828155, 11.14666374, 17.82846835, 30.81872094, 33.51151209
 
 def experiment(sname, seed, datasize, nystr=False):
     def LMO_err(params, M=10):
-        al, bl = np.exp(params)
-        L = bl * bl * np.exp(-L0 / al / al / 2) + 1e-6 * EYEN
+        al0, al1, bl = np.exp(params)
+        L = bl * bl * np.exp(-L0 / al0 / al0 / 2) * np.exp(-L1 / al1 / al1 / 2) + 1e-6 * EYEN
         if nystr:
             tmp_mat = L @ eig_vec_K
             C = L - tmp_mat @ np.linalg.inv(eig_vec_K.T @ tmp_mat / N2 + inv_eig_val_K) @ tmp_mat.T / N2
@@ -50,8 +60,8 @@ def experiment(sname, seed, datasize, nystr=False):
     def callback0(params, timer=None):
         global Nfeval, prev_norm, opt_params, opt_test_err
         if Nfeval % 1 == 0:
-            al, bl = params
-            L = bl * bl * np.exp(-L0 / al / al / 2) + 1e-6 * EYEN
+            al0, al1, bl = params
+            L = bl * bl * np.exp(-L0 / al0 / al0 / 2) * np.exp(-L1 / al1 / al1 / 2) + 1e-6 * EYEN
             if nystr:
                 alpha = EYEN - eig_vec_K @ np.linalg.inv(
                     eig_vec_K.T @ L @ eig_vec_K / N2 + np.diag(1 / eig_val_K / N2)) @ eig_vec_K.T @ L / N2
@@ -60,7 +70,7 @@ def experiment(sname, seed, datasize, nystr=False):
                 LWL_inv = chol_inv(L @ W @ L + L / N2 + JITTER * EYEN)
                 alpha = LWL_inv @ L @ W @ Y
                 # L_W_inv = chol_inv(W*N2+L_inv)
-            test_L = bl * bl * np.exp(-test_L0 / al / al / 2)
+            test_L = bl * bl * np.exp(-test_L0 / al0 / al0 / 2) * np.exp(-test_L0 / al0 / al0 / 2)
             pred_mean = test_L @ alpha
             if timer:
                 return
@@ -84,8 +94,8 @@ def experiment(sname, seed, datasize, nystr=False):
 
     def get_causal_effect(params, do_A, w):
         "to be called within experiment function."
-        al, bl = params
-        L = bl * bl * np.exp(-L0 / al / al / 2) + 1e-6 * EYEN
+        al0, al1, bl = params
+        L = bl * bl * np.exp(-L0 / al0 / al0 / 2) * np.exp(-L1 / al1 / al1 / 2) + 1e-6 * EYEN
         if nystr:
             alpha = EYEN - eig_vec_K @ np.linalg.inv(
                 eig_vec_K.T @ L @ eig_vec_K / N2 + np.diag(1 / eig_val_K / N2)) @ eig_vec_K.T @ L / N2
@@ -100,8 +110,9 @@ def experiment(sname, seed, datasize, nystr=False):
             a = np.repeat(a, [w.shape[0]]).reshape(-1, 1)
             w = w.reshape(-1, 1)
             aw = np.concatenate([a, w], axis=-1)
-            ate_L0 = _sqdist(aw, X)
-            ate_L = bl * bl * np.exp(-ate_L0 / al / al / 2)
+            ate_L0 = _sqdist(aw[:, 0:1], X[:, 0:1])
+            ate_L1 = _sqdist(aw[:, 1:2], X[:, 1:2])
+            ate_L = bl * bl * np.exp(-ate_L0 / al0 / al0 / 2) * np.exp(-ate_L1 / al1 / al1 / 2)
             h_out = ate_L @ alpha
 
             mean_h = np.mean(h_out).reshape(-1, 1)
@@ -132,18 +143,20 @@ def experiment(sname, seed, datasize, nystr=False):
     EYEN = np.eye(X.shape[0])
     ak0, ak1 = get_median_inter_mnist(Z[:, 0:1]), get_median_inter_mnist(Z[:, 1:2])
     N2 = X.shape[0] ** 2
-    W0 = _sqdist(Z, None)
+    W0, W1 = _sqdist(Z[:, 0:1], None), _sqdist(Z[:, 1:2], None)
     W = (np.exp(-W0 / ak0 / ak0 / 2) + np.exp(-W0 / ak0 / ak0 / 200) + np.exp(
-        -W0 / ak0 / ak0 * 50)) / 3 / N2  # TODO: recompute W for my case
-    del W0
-    L0, test_L0 = _sqdist(X, None), _sqdist(test_X, X)
+        -W0 / ak0 / ak0 * 50)) / 3 / N2 * (np.exp(-W1 / ak1 / ak1 / 2) + np.exp(-W1 / ak1 / ak1 / 200) + np.exp(
+        -W1 / ak1 / ak1 * 50)) / 3   # TODO: recompute W for my case
+    del W0, W1
+    L0, test_L0 = _sqdist(X[:, 0:1], None), _sqdist(test_X[:, 0:1], X[:, 0:1])
+    L1, test_L1 = _sqdist(X[:, 1:2], None), _sqdist(test_X[:, 1:2], X[:, 1:2])
 
     # measure time
     # callback0(np.random.randn(2)/10,True)
     # np.save(ROOT_PATH + "/MMR_IVs/results/zoo/" + sname + '/LMO_errs_{}_nystr_{}_time.npy'.format(seed,train.x.shape[0]),time.time()-t0)
     # return
 
-    params0 = np.random.randn(2) / 10
+    params0 = np.random.randn(3) / 10
     bounds = None  # [[0.01,10],[0.01,5]]
     if nystr:
         for _ in range(seed + 1):
@@ -227,15 +240,3 @@ if __name__ == '__main__':
                 experiment(sname, seed, datasize, False if datasize < 1000 else True)
 
             summarize_res(sname, datasize)
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-

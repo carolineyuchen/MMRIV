@@ -244,9 +244,9 @@ class FCNN(nn.Module):
     def __init__(self,input_size):
         super(FCNN, self).__init__()
         # an affine operation: y = Wx + b
-        self.fc1 = nn.Linear(input_size, 100)
-        self.fc2 = nn.Linear(100, 100)
-        self.fc3 = nn.Linear(100, 1)
+        self.fc1 = nn.Linear(input_size, 10)
+        self.fc2 = nn.Linear(10, 10)
+        self.fc3 = nn.Linear(10, 1)
 
     def forward(self, x):
         x = torch.relu(self.fc1(x))

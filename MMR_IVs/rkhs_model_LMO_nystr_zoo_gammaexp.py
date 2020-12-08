@@ -174,22 +174,22 @@ def experiment(sname, seed, datasize, nystr=False):
     plt.xlabel('A')
     plt.ylabel('EYdoA-est')
     plt.savefig(
-        os.path.join(PATH, str(date.today()), 'causal_effect_estimates_nystr_{}'.format(AW_train.shape[0]) + '.png'))
+        os.path.join(PATH, str(date.today()), 'causal_effect_estimates_nystr_prodkern_{}'.format(AW_train.shape[0]) + '.png'))
     plt.close()
     print('ground truth ate: ', EY_do_A_gt)
     visualise_ATEs(EY_do_A_gt, EYhat_do_A,
                    x_name='E[Y|do(A)] - gt',
                    y_name='beta_A',
                    save_loc=os.path.join(PATH, str(date.today())) + '/',
-                   save_name='ate_{}_nystr.png'.format(AW_train.shape[0]))
+                   save_name='ate_{}_nystr_prodkern.png'.format(AW_train.shape[0]))
     causal_effect_mean_abs_err = np.mean(np.abs(EY_do_A_gt - EYhat_do_A))
-    causal_effect_mae_file = open(os.path.join(PATH, str(date.today()), "ate_mae_{}_nystrom.txt".format(AW_train.shape[0])),
+    causal_effect_mae_file = open(os.path.join(PATH, str(date.today()), "ate_mae_{}_nystrom_prodkern.txt".format(AW_train.shape[0])),
                                   "a")
     causal_effect_mae_file.write("mae_: {}\n".format(causal_effect_mean_abs_err))
     causal_effect_mae_file.close()
 
     os.makedirs(PATH, exist_ok=True)
-    np.save(os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_{}.npy'.format(seed, AW_train.shape[0])), [opt_params, prev_norm, opt_test_err])
+    np.save(os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_prodkern_{}.npy'.format(seed, AW_train.shape[0])), [opt_params, prev_norm, opt_test_err])
 
     # TODO: where is alpha? and how is it making a prediction? alpha is defined in the callback function. how is it reached?
 
@@ -200,12 +200,12 @@ def summarize_res(sname, datasize):
     times = []
     for i in range(100):
         PATH = ROOT_PATH + "/MMR_IVs/results/zoo/" + sname + "/"
-        filename = os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_{}.npy'.format(i, datasize))
+        filename = os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_prodkern_{}.npy'.format(i, datasize))
         if os.path.exists(filename):
             tmp_res = np.load(filename, allow_pickle=True)
             if tmp_res[-1] is not None:
                 res += [tmp_res[-1]]
-        time_path = os.path.join(PATH, str(date.today()), '/LMO_errs_{}_nystr_{}_time.npy'.format(i, datasize))
+        time_path = os.path.join(PATH, str(date.today()), '/LMO_errs_{}_nystr_prodkern_{}_time.npy'.format(i, datasize))
         if os.path.exists(time_path):
             t = np.load(time_path)
             times += [t]
@@ -227,15 +227,3 @@ if __name__ == '__main__':
                 experiment(sname, seed, datasize, False if datasize < 1000 else True)
 
             summarize_res(sname, datasize)
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-
