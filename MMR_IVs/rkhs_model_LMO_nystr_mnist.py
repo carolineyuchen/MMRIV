@@ -95,7 +95,7 @@ def experiment(sname, seed, nystr=True):
         opt_params = params
         print(True,opt_params, opt_test_err, prev_norm, norm[0,0])
 
-    train, dev, test = load_data(ROOT_PATH+'/data/'+sname+'/main.npz')
+    train, dev, test = load_data(ROOT_PATH+'/data/'+sname+'/main_orig.npz')
     del dev
 
     # avoid same indices when run on the cluster

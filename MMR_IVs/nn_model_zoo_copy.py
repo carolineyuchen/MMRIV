@@ -13,12 +13,15 @@ from joblib import Parallel, delayed
 from util import get_median_inter_mnist, Kernel, load_data, ROOT_PATH,_sqdist,FCNN, CNN, bundle_az_aw, visualise_ATEs
 import argparse
 
-parser = argparse.ArgumentParser(description='parses argument for nn ')
+parser = argparse.ArgumentParser(description='parses argument for nn training.')
+
+parser.add_argument('--sem', type=str, help='structural equation model to use data from.')
+
+args = parser.parse_args()
 
 
 
-
-def run_experiment_nn(sname,datasize,indices=[],seed=527,training=True):
+def run_experiment_nn(sname,datasize,indices=[],seed=527,training=True, args=None):
     torch.manual_seed(seed)
     np.random.seed(seed)
     if len(indices)==2:
@@ -29,7 +32,7 @@ def run_experiment_nn(sname,datasize,indices=[],seed=527,training=True):
     folder = ROOT_PATH+"/MMR_IVs/results/zoo/" + sname + "/"
     os.makedirs(folder, exist_ok=True)
     
-    train, dev, test = load_data(ROOT_PATH+"/data/zoo/"+sname+'/main_orig.npz', Torch=True)
+    train, dev, test = load_data(ROOT_PATH+"/data/zoo/"+sname+'/main_{}.npz'.format(args.sem), Torch=True)
     Y = torch.cat((train.y, dev.y), dim=0).float()
     AZ_train, AW_train = bundle_az_aw(train.a, train.z, train.w, Torch=True)
     AZ_test, AW_test = bundle_az_aw(test.a, test.z, test.w, Torch=True)
@@ -43,9 +46,9 @@ def run_experiment_nn(sname,datasize,indices=[],seed=527,training=True):
     batch_size = 1000 if train.a.shape[0]>1000 else train.a.shape[0]
 
     # load expectation eval data
-    axzy = np.load(ROOT_PATH + "/data/zoo/" + sname + '/cond_exp_metric_orig.npz')['axzy']
-    w_samples = np.load(ROOT_PATH + "/data/zoo/" + sname + '/cond_exp_metric_orig.npz')['w_samples']
-    y_samples = np.load(ROOT_PATH + "/data/zoo/" + sname + '/cond_exp_metric_orig.npz')['y_samples']
+    axzy = np.load(ROOT_PATH + "/data/zoo/" + sname + '/cond_exp_metric_{}.npz'.format(args.sem))['axzy']
+    w_samples = np.load(ROOT_PATH + "/data/zoo/" + sname + '/cond_exp_metric_{}.npz'.format(args.sem))['w_samples']
+    y_samples = np.load(ROOT_PATH + "/data/zoo/" + sname + '/cond_exp_metric_{}.npz'.format(args.sem))['y_samples']
     y_axz = axzy[:, -1]
     ax = axzy[:, :2]
 
@@ -206,8 +209,8 @@ def run_experiment_nn(sname,datasize,indices=[],seed=527,training=True):
                 plt.close()
 
             # do causal effect estimates
-            do_A = np.load(ROOT_PATH+"/data/zoo/"+sname+'/do_A_orig.npz')['do_A']
-            EY_do_A_gt = np.load(ROOT_PATH+"/data/zoo/"+sname+'/do_A_orig.npz')['gt_EY_do_A']
+            do_A = np.load(ROOT_PATH+"/data/zoo/"+sname+'/do_A_{}.npz'.format(args.sem))['do_A']
+            EY_do_A_gt = np.load(ROOT_PATH+"/data/zoo/"+sname+'/do_A_{}.npz'.format(args.sem))['gt_EY_do_A']
             w_sample = train.w
             EYhat_do_A = get_causal_effect(net, do_A=do_A, w=w_sample)
             plt.figure()
@@ -271,7 +274,7 @@ if __name__ == '__main__':
         for s in scenarios:
             for lr_id in range(3):
                 for dw_id in range(7):
-                    run_experiment_nn(s, datasize, [lr_id, dw_id])
+                    run_experiment_nn(s, datasize, [lr_id, dw_id], args=args)
 
         for s in scenarios:
-            run_experiment_nn(s, datasize, [1, 0], training=False)
+            run_experiment_nn(s, datasize, [1, 0], training=False, args=args)

@@ -8,7 +8,7 @@ from joblib import Parallel, delayed
 import torch.nn as nn
 import torch.nn.functional as F
 import autograd.scipy.linalg as splg
-from simulation.simulation_afsaneh import gen_w
+from simulation.simulation_afsaneh_deprecated import gen_w
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns

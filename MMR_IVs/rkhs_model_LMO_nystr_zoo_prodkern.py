@@ -8,32 +8,34 @@ from joblib import Parallel, delayed
 import time
 import matplotlib.pyplot as plt
 from datetime import date
+import argparse
+import random
 
 Nfeval = 1
 seed = 527
 np.random.seed(seed)
 JITTER = 1e-7
-nystr_M = 300
+nystr_M = 200
 EYE_nystr = np.eye(nystr_M)
 opt_params = None
 prev_norm = None
 opt_test_err = None
 
-a = 1.0, beta_a = [[1.66985379]]
-a = 2.0, beta_a = [[2.20539014]]
-a = 3.0, beta_a = [[3.88334693]]
-a = 4.0, beta_a = [[6.85828155]]
-a = 5.0, beta_a = [[11.14666374]]
-a = 6.0, beta_a = [[17.82846835]]
-a = 7.0, beta_a = [[30.81872094]]
-a = 8.0, beta_a = [[33.51151209]]
+parser = argparse.ArgumentParser(description='run rhks model with general gaussian-based kernel')
 
-1.66985379, 2.20539014, 3.88334693, 6.85828155, 11.14666374, 17.82846835, 30.81872094, 33.51151209
+parser.add_argument('--av-kernel', type=bool, default=False, help='use single bandwidth or average')
+parser.add_argument('--sem', type=str, help='set which SEM to use data from')
+args = parser.parse_args()
+print('parsed av-kernel: ', args.av_kernel)
 
-def experiment(sname, seed, datasize, nystr=False):
+def experiment(sname, seed, datasize, nystr=False, args=None):
+    np.random.seed(1)
+    random.seed(1)
     def LMO_err(params, M=10):
-        al0, al1, bl = np.exp(params)
-        L = bl * bl * np.exp(-L0 / al0 / al0 / 2) * np.exp(-L1 / al1 / al1 / 2) + 1e-6 * EYEN
+        np.random.seed(2)
+        random.seed(2)
+        al, bl = np.exp(params)
+        L = bl * bl * np.exp(-L0 / al / al / 2) * np.exp(-L1 / al / al / 2) + 1e-6 * EYEN
         if nystr:
             tmp_mat = L @ eig_vec_K
             C = L - tmp_mat @ np.linalg.inv(eig_vec_K.T @ tmp_mat / N2 + inv_eig_val_K) @ tmp_mat.T / N2
@@ -59,9 +61,11 @@ def experiment(sname, seed, datasize, nystr=False):
 
     def callback0(params, timer=None):
         global Nfeval, prev_norm, opt_params, opt_test_err
+        np.random.seed(3)
+        random.seed(3)
         if Nfeval % 1 == 0:
-            al0, al1, bl = params
-            L = bl * bl * np.exp(-L0 / al0 / al0 / 2) * np.exp(-L1 / al1 / al1 / 2) + 1e-6 * EYEN
+            al, bl = params
+            L = bl * bl * np.exp(-L0 / al / al / 2) * np.exp(-L1 / al / al / 2) + 1e-6 * EYEN
             if nystr:
                 alpha = EYEN - eig_vec_K @ np.linalg.inv(
                     eig_vec_K.T @ L @ eig_vec_K / N2 + np.diag(1 / eig_val_K / N2)) @ eig_vec_K.T @ L / N2
@@ -70,7 +74,7 @@ def experiment(sname, seed, datasize, nystr=False):
                 LWL_inv = chol_inv(L @ W @ L + L / N2 + JITTER * EYEN)
                 alpha = LWL_inv @ L @ W @ Y
                 # L_W_inv = chol_inv(W*N2+L_inv)
-            test_L = bl * bl * np.exp(-test_L0 / al0 / al0 / 2) * np.exp(-test_L0 / al0 / al0 / 2)
+            test_L = bl * bl * np.exp(-test_L0 / al / al / 2) * np.exp(-test_L1 / al / al / 2)
             pred_mean = test_L @ alpha
             if timer:
                 return
@@ -94,8 +98,10 @@ def experiment(sname, seed, datasize, nystr=False):
 
     def get_causal_effect(params, do_A, w):
         "to be called within experiment function."
-        al0, al1, bl = params
-        L = bl * bl * np.exp(-L0 / al0 / al0 / 2) * np.exp(-L1 / al1 / al1 / 2) + 1e-6 * EYEN
+        np.random.seed(4)
+        random.seed(4)
+        al, bl = params
+        L = bl * bl * np.exp(-L0 / al / al / 2) * np.exp(-L1 / al / al / 2) + 1e-6 * EYEN
         if nystr:
             alpha = EYEN - eig_vec_K @ np.linalg.inv(
                 eig_vec_K.T @ L @ eig_vec_K / N2 + np.diag(1 / eig_val_K / N2)) @ eig_vec_K.T @ L / N2
@@ -112,7 +118,7 @@ def experiment(sname, seed, datasize, nystr=False):
             aw = np.concatenate([a, w], axis=-1)
             ate_L0 = _sqdist(aw[:, 0:1], X[:, 0:1])
             ate_L1 = _sqdist(aw[:, 1:2], X[:, 1:2])
-            ate_L = bl * bl * np.exp(-ate_L0 / al0 / al0 / 2) * np.exp(-ate_L1 / al1 / al1 / 2)
+            ate_L = bl * bl * np.exp(-ate_L0 / al / al / 2) * np.exp(-ate_L1 / al / al / 2)
             h_out = ate_L @ alpha
 
             mean_h = np.mean(h_out).reshape(-1, 1)
@@ -128,8 +134,11 @@ def experiment(sname, seed, datasize, nystr=False):
     # Z = np.vstack((train.z,dev.z))
     # test_X = test.x
     # test_Y = test.g
-
-    train, dev, test = load_data(ROOT_PATH + "/data/zoo/" + sname + '/main.npz')
+    t1 = time.time()
+    train, dev, test = load_data(ROOT_PATH + "/data/zoo/" + sname + '/main_{}.npz'.format(args.sem))
+    # train, dev, test = train[:300], dev[:100], test[:100]
+    t2 = time.time()
+    print('t2 - t1 = ', t2 - t1)
     Y = np.concatenate((train.y, dev.y), axis=0).reshape(-1, 1)
     # test_Y = test.y
     AZ_train, AW_train = bundle_az_aw(train.a, train.z, train.w)
@@ -139,24 +148,34 @@ def experiment(sname, seed, datasize, nystr=False):
     X, Z = np.concatenate((AW_train, AW_dev), axis=0), np.concatenate((AZ_train, AZ_dev), axis=0)
     test_X, test_Y = AW_test, test.y.reshape(-1, 1)  # TODO: is test.g just test.y?
 
-    t0 = time.time()
+    t3 = time.time()
+    print('t3 - t2', t3-t2)
     EYEN = np.eye(X.shape[0])
     ak0, ak1 = get_median_inter_mnist(Z[:, 0:1]), get_median_inter_mnist(Z[:, 1:2])
     N2 = X.shape[0] ** 2
     W0, W1 = _sqdist(Z[:, 0:1], None), _sqdist(Z[:, 1:2], None)
-    W = (np.exp(-W0 / ak0 / ak0 / 2) + np.exp(-W0 / ak0 / ak0 / 200) + np.exp(
+    print('av kernel indicator: ', args.av_kernel)
+    W = np.exp(-W0 / ak0 / ak0 / 2) * np.exp(-W1 / ak1 / ak1 / 2) / N2 if not args.av_kernel \
+        else (np.exp(-W0 / ak0 / ak0 / 2) + np.exp(-W0 / ak0 / ak0 / 200) + np.exp(
         -W0 / ak0 / ak0 * 50)) / 3 / N2 * (np.exp(-W1 / ak1 / ak1 / 2) + np.exp(-W1 / ak1 / ak1 / 200) + np.exp(
-        -W1 / ak1 / ak1 * 50)) / 3   # TODO: recompute W for my case
+        -W1 / ak1 / ak1 * 50)) / 3
+
+    # W = (np.exp(-W0 / ak0 / ak0 / 2) + np.exp(-W0 / ak0 / ak0 / 200) + np.exp(
+    #     -W0 / ak0 / ak0 * 50)) / 3 / N2 * (np.exp(-W1 / ak1 / ak1 / 2) + np.exp(-W1 / ak1 / ak1 / 200) + np.exp(
+    #     -W1 / ak1 / ak1 * 50)) / 3   # TODO: recompute W for my case
     del W0, W1
     L0, test_L0 = _sqdist(X[:, 0:1], None), _sqdist(test_X[:, 0:1], X[:, 0:1])
     L1, test_L1 = _sqdist(X[:, 1:2], None), _sqdist(test_X[:, 1:2], X[:, 1:2])
-
+    t4 = time.time()
+    print('t4 - t3', t4-t3)
     # measure time
     # callback0(np.random.randn(2)/10,True)
     # np.save(ROOT_PATH + "/MMR_IVs/results/zoo/" + sname + '/LMO_errs_{}_nystr_{}_time.npy'.format(seed,train.x.shape[0]),time.time()-t0)
     # return
 
-    params0 = np.random.randn(3) / 10
+    # params0 = np.random.randn(2)  # /10
+    params0 = np.array([1., 1.])
+    print('starting param: ', params0)
     bounds = None  # [[0.01,10],[0.01,5]]
     if nystr:
         for _ in range(seed + 1):
@@ -166,20 +185,24 @@ def experiment(sname, seed, datasize, nystr=False):
         W_nystr = eig_vec_K @ np.diag(eig_val_K) @ eig_vec_K.T / N2
         W_nystr_Y = W_nystr @ Y
 
+    t5 = time.time()
+    print('t5 - t4', t5-t4)
     obj_grad = value_and_grad(lambda params: LMO_err(params))
-    # try:
-    res = minimize(obj_grad, x0=params0, bounds=bounds, method='L-BFGS-B', jac=True, options={'maxiter': 5000},
+    try:
+        res = minimize(obj_grad, x0=params0, bounds=bounds, method='L-BFGS-B', jac=True, options={'maxiter': 5000},
                    callback=callback0)
     # res stands for results (not residuals!).
-    # except Exception as e:
-    #     print(e)
+    except Exception as e:
+        print(e)
 
     PATH = ROOT_PATH + "/MMR_IVs/results/zoo/" + sname + "/"
+    if not os.path.exists(PATH+str(date.today())):
+        os.mkdir(PATH + str(date.today()))
 
     assert opt_params is not None
     params = opt_params
-    do_A = np.load(ROOT_PATH + "/data/zoo/" + sname + '/do_A.npz')['do_A']
-    EY_do_A_gt = np.load(ROOT_PATH + "/data/zoo/" + sname + '/do_A.npz')['gt_EY_do_A']
+    do_A = np.load(ROOT_PATH + "/data/zoo/" + sname + '/do_A_{}.npz'.format(args.sem))['do_A']
+    EY_do_A_gt = np.load(ROOT_PATH + "/data/zoo/" + sname + '/do_A_{}.npz'.format(args.sem))['gt_EY_do_A']
     w_sample = train.w
     EYhat_do_A = get_causal_effect(params=params, do_A=do_A, w=w_sample)
     plt.figure()
@@ -208,6 +231,8 @@ def experiment(sname, seed, datasize, nystr=False):
 
 
 def summarize_res(sname, datasize):
+    np.random.seed(5)
+    random.seed(5)
     print(sname)
     res = []
     times = []
@@ -231,12 +256,29 @@ def summarize_res(sname, datasize):
     print('time: ', np.mean(times), np.std(times))
 
 
+
 if __name__ == '__main__':
+    np.random.seed(6)
+    random.seed(6)
     # snames = ['step','sin','abs','linear']
     snames = ["sim_1d_no_x"]
     for datasize in [5000]:
         for sname in snames:
             for seed in range(100):
-                experiment(sname, seed, datasize, False if datasize < 1000 else True)
+                np.random.seed(6)
+                random.seed(6)
+                experiment(sname, seed, datasize, False if datasize < 1000 else True, args=args)
 
             summarize_res(sname, datasize)
+
+
+
+
+
+
+
+
+
+
+
+

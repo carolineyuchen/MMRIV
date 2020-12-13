@@ -5,7 +5,7 @@ from sklearn.decomposition import PCA
 
 def precomp(sname,i,seed=527):
     np.random.seed(seed)
-    train, dev, test = load_data(ROOT_PATH+'/data/'+sname+'/main.npz',Torch=False)
+    train, dev, test = load_data(ROOT_PATH+'/data/'+sname+'/main_orig.npz',Torch=False)
     folder = ROOT_PATH+'/tmp/'
     os.makedirs(folder, exist_ok=True)
     if sname in ['mnist_z','mnist_xz']:

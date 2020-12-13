@@ -8,6 +8,7 @@ from joblib import Parallel, delayed
 import time
 import matplotlib.pyplot as plt
 from datetime import date
+import argparse
 
 Nfeval = 1
 seed = 527
@@ -19,19 +20,24 @@ opt_params = None
 prev_norm = None
 opt_test_err = None
 
+parser = argparse.ArgumentParser(description='run rhks model with general gaussian-based kernel')
 
-def experiment(sname, seed, datasize, nystr=False):
+parser.add_argument('--av-kernel', type=bool, default=False, help='use single bandwidth or average')
+args = parser.parse_args()
+print('parsed av-kernel: ', args.av_kernel)
+
+def experiment(sname, seed, datasize, nystr=False, args=None):
     def LMO_err(params, M=10):
         al, bl = np.exp(params)
         L = bl * bl * np.exp(-L0 / al / al / 2) + 1e-6 * EYEN
         if nystr:
             tmp_mat = L @ eig_vec_K
             C = L - tmp_mat @ np.linalg.inv(eig_vec_K.T @ tmp_mat / N2 + inv_eig_val_K) @ tmp_mat.T / N2
-            c = C @ W_nystr_Y * N2
+            c = C @ W_nystr_Y
         else:
             LWL_inv = chol_inv(L @ W @ L + L / N2 + JITTER * EYEN)
             C = L @ LWL_inv @ L / N2
-            c = C @ W @ Y * N2
+            c = C @ W @ Y * N2 # TODO: next
         c_y = c - Y
         lmo_err = 0
         N = 0
@@ -54,8 +60,8 @@ def experiment(sname, seed, datasize, nystr=False):
             L = bl * bl * np.exp(-L0 / al / al / 2) + 1e-6 * EYEN
             if nystr:
                 alpha = EYEN - eig_vec_K @ np.linalg.inv(
-                    eig_vec_K.T @ L @ eig_vec_K / N2 + np.diag(1 / eig_val_K / N2)) @ eig_vec_K.T @ L / N2
-                alpha = alpha @ W_nystr @ Y * N2
+                    eig_vec_K.T @ L @ eig_vec_K / N2 + np.diag(1 / eig_val_K)) @ eig_vec_K.T @ L / N2
+                alpha = alpha @ W_nystr @ Y
             else:
                 LWL_inv = chol_inv(L @ W @ L + L / N2 + JITTER * EYEN)
                 alpha = LWL_inv @ L @ W @ Y
@@ -117,8 +123,11 @@ def experiment(sname, seed, datasize, nystr=False):
     # Z = np.vstack((train.z,dev.z))
     # test_X = test.x
     # test_Y = test.g
-
+    t1 = time.time()
     train, dev, test = load_data(ROOT_PATH + "/data/zoo/" + sname + '/main_orig.npz')
+    # train, dev, test = train[:300], dev[:100], test[:100]
+    t2 = time.time()
+    print('t2 - t1 = ', t2 - t1)
     Y = np.concatenate((train.y, dev.y), axis=0).reshape(-1, 1)
     # test_Y = test.y
     AZ_train, AW_train = bundle_az_aw(train.a, train.z, train.w)
@@ -128,16 +137,19 @@ def experiment(sname, seed, datasize, nystr=False):
     X, Z = np.concatenate((AW_train, AW_dev), axis=0), np.concatenate((AZ_train, AZ_dev), axis=0)
     test_X, test_Y = AW_test, test.y.reshape(-1, 1)  # TODO: is test.g just test.y?
 
-    t0 = time.time()
+    t3 = time.time()
+    print('t3 - t2', t3-t2)
     EYEN = np.eye(X.shape[0])
     ak0, ak1 = get_median_inter_mnist(Z[:, 0:1]), get_median_inter_mnist(Z[:, 1:2])
     N2 = X.shape[0] ** 2
     W0 = _sqdist(Z, None)
-    W = (np.exp(-W0 / ak0 / ak0 / 2) + np.exp(-W0 / ak0 / ak0 / 200) + np.exp(
-        -W0 / ak0 / ak0 * 50)) / 3 / N2  # TODO: recompute W for my case
+    print('av kernel indicator: ', args.av_kernel)
+    W = np.exp(-W0 / ak0 / ak0 / 2) / N2 if not args.av_kernel \
+        else (np.exp(-W0 / ak0 / ak0 / 2) + np.exp(-W0 / ak0 / ak0 / 200) + np.exp(-W0 / ak0 / ak0 * 50)) / 3 / N2
     del W0
     L0, test_L0 = _sqdist(X, None), _sqdist(test_X, X)
-
+    t4 = time.time()
+    print('t4 - t3', t4-t3)
     # measure time
     # callback0(np.random.randn(2)/10,True)
     # np.save(ROOT_PATH + "/MMR_IVs/results/zoo/" + sname + '/LMO_errs_{}_nystr_{}_time.npy'.format(seed,train.x.shape[0]),time.time()-t0)
@@ -148,11 +160,14 @@ def experiment(sname, seed, datasize, nystr=False):
     if nystr:
         for _ in range(seed + 1):
             random_indices = np.sort(np.random.choice(range(W.shape[0]), nystr_M, replace=False))
+        # decomposing n^2W
         eig_val_K, eig_vec_K = nystrom_decomp(W * N2, random_indices)
-        inv_eig_val_K = np.diag(1 / eig_val_K / N2)
-        W_nystr = eig_vec_K @ np.diag(eig_val_K) @ eig_vec_K.T / N2
+        inv_eig_val_K = np.diag(1 / eig_val_K * N2)
+        W_nystr = eig_vec_K @ np.diag(eig_val_K) @ eig_vec_K.T / N2 # checked, this is the same as W_V
         W_nystr_Y = W_nystr @ Y
 
+    t5 = time.time()
+    print('t5 - t4', t5-t4)
     obj_grad = value_and_grad(lambda params: LMO_err(params))
     # try:
     res = minimize(obj_grad, x0=params0, bounds=bounds, method='L-BFGS-B', jac=True, options={'maxiter': 5000},
@@ -174,22 +189,22 @@ def experiment(sname, seed, datasize, nystr=False):
     plt.xlabel('A')
     plt.ylabel('EYdoA-est')
     plt.savefig(
-        os.path.join(PATH, str(date.today()), 'causal_effect_estimates_nystr_prodkern_{}'.format(AW_train.shape[0]) + '.png'))
+        os.path.join(PATH, str(date.today()), 'causal_effect_estimates_nystr_{}'.format(AW_train.shape[0]) + '.png'))
     plt.close()
     print('ground truth ate: ', EY_do_A_gt)
     visualise_ATEs(EY_do_A_gt, EYhat_do_A,
                    x_name='E[Y|do(A)] - gt',
                    y_name='beta_A',
                    save_loc=os.path.join(PATH, str(date.today())) + '/',
-                   save_name='ate_{}_nystr_prodkern.png'.format(AW_train.shape[0]))
+                   save_name='ate_{}_nystr.png'.format(AW_train.shape[0]))
     causal_effect_mean_abs_err = np.mean(np.abs(EY_do_A_gt - EYhat_do_A))
-    causal_effect_mae_file = open(os.path.join(PATH, str(date.today()), "ate_mae_{}_nystrom_prodkern.txt".format(AW_train.shape[0])),
+    causal_effect_mae_file = open(os.path.join(PATH, str(date.today()), "ate_mae_{}_nystrom.txt".format(AW_train.shape[0])),
                                   "a")
     causal_effect_mae_file.write("mae_: {}\n".format(causal_effect_mean_abs_err))
     causal_effect_mae_file.close()
 
     os.makedirs(PATH, exist_ok=True)
-    np.save(os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_prodkern_{}.npy'.format(seed, AW_train.shape[0])), [opt_params, prev_norm, opt_test_err])
+    np.save(os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_{}.npy'.format(seed, AW_train.shape[0])), [opt_params, prev_norm, opt_test_err])
 
     # TODO: where is alpha? and how is it making a prediction? alpha is defined in the callback function. how is it reached?
 
@@ -200,12 +215,12 @@ def summarize_res(sname, datasize):
     times = []
     for i in range(100):
         PATH = ROOT_PATH + "/MMR_IVs/results/zoo/" + sname + "/"
-        filename = os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_prodkern_{}.npy'.format(i, datasize))
+        filename = os.path.join(PATH, str(date.today()), 'LMO_errs_{}_nystr_{}.npy'.format(i, datasize))
         if os.path.exists(filename):
             tmp_res = np.load(filename, allow_pickle=True)
             if tmp_res[-1] is not None:
                 res += [tmp_res[-1]]
-        time_path = os.path.join(PATH, str(date.today()), '/LMO_errs_{}_nystr_prodkern_{}_time.npy'.format(i, datasize))
+        time_path = os.path.join(PATH, str(date.today()), '/LMO_errs_{}_nystr_{}_time.npy'.format(i, datasize))
         if os.path.exists(time_path):
             t = np.load(time_path)
             times += [t]
@@ -218,12 +233,25 @@ def summarize_res(sname, datasize):
     print('time: ', np.mean(times), np.std(times))
 
 
+
 if __name__ == '__main__':
     # snames = ['step','sin','abs','linear']
     snames = ["sim_1d_no_x"]
     for datasize in [5000]:
         for sname in snames:
             for seed in range(100):
-                experiment(sname, seed, datasize, False if datasize < 1000 else True)
+                experiment(sname, seed, datasize, False if datasize < 1000 else True, args=args)
 
             summarize_res(sname, datasize)
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+

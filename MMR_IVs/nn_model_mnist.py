@@ -18,7 +18,7 @@ def run_experiment_nn(sname, datasize, indices=[], seed=527, training=True):
     folder = ROOT_PATH+"/MMR_IVs/results/" + sname + "/"
     os.makedirs(folder, exist_ok=True) 
 
-    train, dev, test = load_data(ROOT_PATH+"/data/" + sname + '/main.npz', Torch=True)
+    train, dev, test = load_data(ROOT_PATH+"/data/" + sname + '/main_orig.npz', Torch=True)
     X, Z, Y = torch.cat((train.x, dev.x), dim=0).float(), torch.cat((train.z, dev.z), dim=0).float(), torch.cat((train.y, dev.y), dim=0).float()
     test_X, test_G = test.x.float(), test.g.float()
     n_train = train.x.shape[0]
